@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Book Finder</title>
+  <meta name="description" content="Search any book and view a rich info page. Powered by Open Library & Google Books." />
+  <style>
+    :root {
+      --bg: #0b1020;        /* deep blue */
+      --card: #121935;      /* indigo */
+      --muted: #9fb3ff;     /* soft indigo */
+      --text: #e9ecff;      /* near-white */
+      --accent: #7aa2ff;    /* blue */
+      --accent-2: #9fe8c9;  /* mint */
+      --danger: #ff7a7a;    /* coral */
+      --shadow: rgba(0,0,0,.25);
+    }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background: radial-gradient(1200px 600px at 10% -10%, rgba(122,162,255,.15), transparent), var(--bg); color: var(--text) }
+    a { color: inherit; text-decoration: none }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px }
+    header { display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap }
+    .brand { display:flex; align-items:center; gap:12px }
+    .logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 20px var(--shadow); display:grid; place-items:center; font-weight:700; color:#0b1020 }
+    h1 { font-size: clamp(18px, 2.6vw, 28px); margin: 0 }
+
+    .searchbar { position: relative; flex: 1; min-width: 260px; max-width: 640px }
+    .searchbar input { width: 100%; padding: 14px 44px 14px 44px; border: 1px solid rgba(159,179,255,.25); border-radius: 14px; background: rgba(18,25,53,.8); color: var(--text); outline: none; box-shadow: 0 10px 30px -12px var(--shadow) }
+    .searchbar input::placeholder { color: #c7d2ff99 }
+    .icon-left, .icon-right { position:absolute; top:50%; transform:translateY(-50%); opacity:.9 }
+    .icon-left { left:12px }
+    .icon-right { right:12px; cursor: pointer }
+
+    .hint { color:#c7d2ffaa; font-size: 13px; margin-top: 8px }
+
+    .results { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:16px; margin-top: 22px }
+    .card { background: linear-gradient(180deg, rgba(18,25,53,.9), rgba(18,25,53,.6)); border: 1px solid rgba(159,179,255,.18); border-radius: 16px; box-shadow: 0 12px 26px -12px var(--shadow); overflow: hidden; display:flex; flex-direction:column; min-height: 330px }
+    .thumb { aspect-ratio: 3/4; width: 100%; background: #0e1430; display:grid; place-items:center }
+    .thumb img { width: 100%; height: 100%; object-fit: cover }
+    .card-body { padding: 12px 14px 14px; display:flex; flex-direction:column; gap:8px; flex:1 }
+    .title { font-weight: 700; font-size: 15px; line-height: 1.2 }
+    .authors, .meta { color:#c7d2ffcc; font-size: 13px }
+    .badges { display:flex; gap:6px; flex-wrap: wrap }
+    .badge { border:1px solid rgba(159,179,255,.25); padding: 3px 8px; border-radius: 999px; font-size: 12px; color:#c7d2ffcc }
+    .actions { margin-top:auto; display:flex; gap:8px }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; border:1px solid rgba(159,179,255,.3); background: rgba(122,162,255,.1); padding: 8px 10px; border-radius: 12px; font-weight: 600; cursor: pointer }
+    .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:#0b1020 }
+    .btn:hover { filter: brightness(1.05) }
+
+    .empty, .error, .loading { margin-top: 28px; background: rgba(18,25,53,.7); border: 1px dashed rgba(159,179,255,.35); padding: 18px; border-radius: 14px }
+
+    .detail { margin-top: 24px; display:grid; grid-template-columns: 260px 1fr; gap: 22px }
+    .detail-cover { border-radius: 16px; overflow:hidden; border: 1px solid rgba(159,179,255,.18); background:#0e1430; height: 0; padding-bottom: 150%; position: relative }
+    .detail-cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover }
+    .detail h2 { margin: 0 0 6px; font-size: clamp(20px, 3.2vw, 32px) }
+    .subtle { color:#c7d2ffcc }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px }
+
+    .section { margin-top: 18px }
+    .section h3 { margin: 0 0 8px; font-size: 16px; color: var(--muted) }
+    .textblock { white-space: pre-wrap; line-height: 1.6 }
+
+    footer { margin: 48px 0 24px; text-align: center; color:#c7d2ff88; font-size: 13px }
+    code.k { background: rgba(122,162,255,.12); padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(159,179,255,.25) }
+
+    @media (max-width: 800px) {
+      .detail { grid-template-columns: 1fr }
+      .detail-cover { padding-bottom: 120%; max-width: 380px }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a class="brand" href="#/">
+        <div class="logo" aria-hidden>BF</div>
+        <h1>Book Finder</h1>
+      </a>
+      <div class="searchbar">
+        <span class="icon-left" aria-hidden>🔎</span>
+        <input id="searchInput" type="search" placeholder="Search any book, author, or ISBN… (e.g., harry potter, 9780140449136)" autocomplete="off" />
+        <span id="clearBtn" class="icon-right" title="Clear">✖</span>
+      </div>
+    </header>
+
+    <p class="hint">Tip: Press <code class="k">Enter</code> to search. Click a result to open a rich info page. Data comes from Open Library and Google Books.</p>
+
+    <main id="app"></main>
+
+    <footer>
+      Built with ❤ using public book APIs (no server needed). You can host this single HTML file anywhere.
+    </footer>
+  </div>
+
+<script>
+// --- Tiny client-side router (hash-based) ----------------------------------
+const routes = {
+  '/': renderHome,
+  '/book': renderBookDetail,
+};
+
+window.addEventListener('hashchange', handleRoute);
+window.addEventListener('load', handleRoute);
+
+function handleRoute() {
+  const { path, params } = parseHash();
+  const view = routes[path] || renderNotFound;
+  view(params);
+}
+
+function parseHash() {
+  // Patterns: #/  or  #/book/{source}:{id}
+  const hash = location.hash || '#/';
+  const parts = hash.slice(1).split('/').filter(Boolean);
+  if (parts.length === 0) return { path: '/', params: {} };
+  if (parts[0] === 'book') {
+    const ref = decodeURIComponent(parts[1] || ''); // e.g., openlibrary:OL12345W
+    const [source, id] = ref.split(':');
+    return { path: '/book', params: { source, id } };
+  }
+  return { path: '/', params: {} };
+}
+
+// --- DOM helpers ------------------------------------------------------------
+const $ = (sel, el = document) => el.querySelector(sel);
+const app = () => document.getElementById('app');
+
+function h(tag, attrs = {}, children = []) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === 'html') el.innerHTML = v;
+    else el.setAttribute(k, v);
+  }
+  for (const child of (Array.isArray(children) ? children : [children])) {
+    if (child == null) continue;
+    el.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+  }
+  return el;
+}
+
+function show(el) { app().replaceChildren(el); }
+
+// --- Search Home ------------------------------------------------------------
+function renderHome() {
+  const q = new URLSearchParams(location.search).get('q') || '';
+  const root = h('div');
+  const list = h('div', { class: 'results' });
+  const status = h('div');
+
+  if (!q) {
+    status.className = 'empty';
+    status.textContent = 'Start by searching for a book above.';
+    root.append(status);
+    show(root);
+    return;
+  }
+
+  const loading = h('div', { class: 'loading' }, `Searching for “${q}”…`);
+  root.append(loading);
+  show(root);
+
+  searchBooks(q).then(results => {
+    if (results.length === 0) {
+      loading.remove();
+      const empty = h('div', { class: 'empty' }, 'No results. Try a different query or an ISBN.');
+      root.append(empty);
+      return;
+    }
+
+    loading.remove();
+    for (const b of results) list.appendChild(renderCard(b));
+    root.append(list);
+  }).catch(err => {
+    loading.remove();
+    const e = h('div', { class: 'error' }, 'Something went wrong while searching.');
+    root.append(e);
+    console.error(err);
+  });
+}
+
+function renderCard(book) {
+  const cover = h('div', { class: 'thumb' }, book.thumbnail ? h('img', { src: book.thumbnail, alt: book.title }) : 'No cover');
+  const title = h('div', { class: 'title' }, book.title);
+  const authors = h('div', { class: 'authors' }, (book.authors && book.authors.length) ? book.authors.join(', ') : 'Unknown author');
+  const meta = h('div', { class: 'meta' }, [book.publishedDate || '', book.pageCount ? ` • ${book.pageCount} pages` : ''].join(''));
+  const badges = h('div', { class: 'badges' }, [ book.language ? h('span', { class: 'badge' }, book.language.toUpperCase()) : null, book.source ? h('span', { class: 'badge' }, sourceLabel(book.source)) : null ]);
+
+  const openBtn = h('button', { class: 'btn primary' }, ['Open']);
+  openBtn.addEventListener('click', () => {
+    location.hash = `#/book/${encodeURIComponent(`${book.source}:${book.id}`)}`;
+  });
+  const extBtn = book.infoLink ? h('a', { class: 'btn', href: book.infoLink, target: '_blank', rel: 'noopener' }, 'Source') : null;
+
+  const body = h('div', { class: 'card-body' }, [title, authors, meta, badges, h('div', { class: 'actions' }, [openBtn, extBtn])]);
+  const card = h('article', { class: 'card' }, [cover, body]);
+  return card;
+}
+
+function sourceLabel(src) { return src === 'openlibrary' ? 'Open Library' : src === 'google' ? 'Google Books' : src }
+
+// --- Detail Page ------------------------------------------------------------
+async function renderBookDetail({ source, id }) {
+  const root = h('div');
+  if (!source || !id) {
+    show(h('div', { class: 'error' }, 'Invalid book reference.'));
+    return;
+  }
+  const loading = h('div', { class: 'loading' }, 'Loading book…');
+  root.append(loading);
+  show(root);
+
+  try {
+    const book = source === 'openlibrary' ? await fetchOpenLibraryDetail(id) : await fetchGoogleDetail(id);
+    loading.remove();
+
+    const cover = h('div', { class: 'detail-cover' }, book.thumbnail ? h('img', { src: book.thumbnail, alt: book.title }) : null);
+
+    const title = h('h2', {}, book.title || 'Untitled');
+    const byline = h('div', { class: 'subtle' }, (book.authors && book.authors.length) ? `by ${book.authors.join(', ')}` : '');
+
+    const chips = h('div', { class: 'chips' }, [
+      book.publishedDate ? chip(book.publishedDate) : null,
+      book.pageCount ? chip(`${book.pageCount} pages`) : null,
+      book.language ? chip(book.language.toUpperCase()) : null,
+      book.source ? chip(sourceLabel(book.source)) : null,
+      ...(book.identifiers?.isbn13 || []).map(x => chip(`ISBN-13 ${x}`)),
+      ...(book.identifiers?.isbn10 || []).map(x => chip(`ISBN-10 ${x}`)),
+    ].filter(Boolean));
+
+    const desc = h('div', { class: 'section' }, [h('h3', {}, 'Description'), h('div', { class: 'textblock' }, book.description || 'No description available.')]);
+
+    const meta = h('div', { class: 'section' }, [
+      h('h3', {}, 'Details'),
+      detailRow('Subjects', (book.subjects || []).slice(0, 20).join(', ') || '—'),
+      detailRow('Publisher', (book.publisher || '—')),
+      detailRow('Published', book.publishedDate || '—'),
+      detailRow('Pages', book.pageCount ? String(book.pageCount) : '—'),
+      detailRow('Language', book.language ? book.language.toUpperCase() : '—'),
+      book.previewLink ? detailRow('Preview', link(book.previewLink, 'Open preview')) : null,
+      book.infoLink ? detailRow('Source', link(book.infoLink, 'View at source')) : null,
+    ].filter(Boolean));
+
+    const left = h('div', {}, [cover]);
+    const right = h('div', {}, [title, byline, chips, desc, meta]);
+    const detail = h('section', { class: 'detail' }, [left, right]);
+
+    const back = h('div', { class: 'section' }, link('#/', '← Back to results'));
+
+    root.append(detail, back);
+    show(root);
+  } catch (e) {
+    console.error(e);
+    loading.remove();
+    const er = h('div', { class: 'error' }, 'Failed to load this book.');
+    root.append(er);
+  }
+}
+
+function chip(text) { return h('span', { class: 'badge' }, text) }
+function detailRow(label, valueNode) {
+  const row = h('div');
+  row.append(h('strong', { style: 'display:inline-block; min-width: 100px; color: var(--muted);' }, label+': '));
+  if (typeof valueNode === 'string') row.append(valueNode); else row.append(valueNode);
+  return row;
+}
+function link(href, text) { return h('a', { href, target: href.startsWith('http') ? '_blank' : undefined, rel: 'noopener' }, text) }
+
+function renderNotFound() {
+  show(h('div', { class: 'error' }, 'Not found.'));
+}
+
+// --- API layer --------------------------------------------------------------
+async function searchBooks(query) {
+  const [ol, g] = await Promise.allSettled([
+    fetchOpenLibrarySearch(query),
+    fetchGoogleSearch(query)
+  ]);
+  const olList = ol.status === 'fulfilled' ? ol.value : [];
+  const gList = g.status === 'fulfilled' ? g.value : [];
+  const all = [...olList, ...gList];
+  // Deduplicate by title+author when possible
+  const seen = new Set();
+  const unique = [];
+  for (const b of all) {
+    const key = (b.title || '') + '|' + (b.authors?.[0] || '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(b);
+  }
+  return unique;
+}
+
+// ---- Open Library ----------------------------------------------------------
+async function fetchOpenLibrarySearch(q) {
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=20`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Open Library search failed');
+  const data = await res.json();
+  return (data.docs || []).map(doc => {
+    const coverId = doc.cover_i;
+    const thumb = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : null;
+    return {
+      id: doc.key?.replace('/works/', '') || doc.cover_edition_key || doc.edition_key?.[0] || doc.key,
+      source: 'openlibrary',
+      title: doc.title,
+      authors: doc.author_name || [],
+      publishedDate: (doc.first_publish_year || doc.publish_year?.[0]) ? String(doc.first_publish_year || doc.publish_year?.[0]) : '',
+      thumbnail: thumb,
+      pageCount: doc.number_of_pages_median || null,
+      language: (doc.language && doc.language[0]) || (doc.language) || '',
+      infoLink: doc.key ? `https://openlibrary.org${doc.key}` : null,
+    };
+  });
+}
+
+async function fetchOpenLibraryDetail(id) {
+  // id is usually a work id like OL45883W
+  // Try work first, then edition fallback.
+  const workUrl = `https://openlibrary.org/works/${id}.json`;
+  let work = null;
+  try {
+    const r = await fetch(workUrl); if (r.ok) work = await r.json();
+  } catch {}
+  if (!work || work.error) {
+    // edition fallback
+    const edUrl = `https://openlibrary.org/books/${id}.json`;
+    const r = await fetch(edUrl); if (!r.ok) throw new Error('Open Library detail missing');
+    const ed = await r.json();
+    const cover = ed.covers?.[0] ? `https://covers.openlibrary.org/b/id/${ed.covers[0]}-L.jpg` : null;
+    return {
+      id, source: 'openlibrary', title: ed.title, authors: await resolveOLAuthors(ed.authors),
+      description: normalizeOLDescription(ed.description),
+      publishedDate: ed.publish_date || '', pageCount: ed.number_of_pages || null,
+      language: Array.isArray(ed.languages) && ed.languages[0]?.key ? ed.languages[0].key.split('/').pop() : '',
+      thumbnail: cover, subjects: ed.subjects || [], publisher: Array.isArray(ed.publishers) ? ed.publishers[0] : '',
+      identifiers: { isbn10: ed.isbn_10 || [], isbn13: ed.isbn_13 || [] }, previewLink: `https://openlibrary.org/books/${id}`,
+      infoLink: `https://openlibrary.org/books/${id}`
+    };
+  }
+  const cover = work.covers?.[0] ? `https://covers.openlibrary.org/b/id/${work.covers[0]}-L.jpg` : null;
+  return {
+    id,
+    source: 'openlibrary',
+    title: work.title,
+    authors: await resolveOLAuthors(work.authors),
+    description: normalizeOLDescription(work.description),
+    publishedDate: work.first_publish_date || '',
+    pageCount: null,
+    language: (Array.isArray(work.languages) && work.languages[0]?.key) ? work.languages[0].key.split('/').pop() : '',
+    thumbnail: cover,
+    subjects: work.subjects || [],
+    publisher: '',
+    identifiers: { isbn10: [], isbn13: [] },
+    previewLink: `https://openlibrary.org/works/${id}`,
+    infoLink: `https://openlibrary.org/works/${id}`,
+  };
+}
+
+async function resolveOLAuthors(authorRefs) {
+  if (!authorRefs || !authorRefs.length) return [];
+  const keys = authorRefs.map(a => a.author ? a.author.key : a.key).filter(Boolean);
+  const names = [];
+  for (const key of keys) {
+    try {
+      const r = await fetch(`https://openlibrary.org${key}.json`);
+      if (r.ok) { const a = await r.json(); if (a && a.name) names.push(a.name); }
+    } catch {}
+  }
+  return names;
+}
+
+function normalizeOLDescription(desc) {
+  if (!desc) return '';
+  if (typeof desc === 'string') return desc;
+  if (typeof desc === 'object' && 'value' in desc) return desc.value;
+  return '';
+}
+
+// ---- Google Books ----------------------------------------------------------
+async function fetchGoogleSearch(q) {
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=20`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Google Books search failed');
+  const data = await res.json();
+  return (data.items || []).map(item => normalizeGoogleVolume(item));
+}
+
+async function fetchGoogleDetail(id) {
+  const url = `https://www.googleapis.com/books/v1/volumes/${id}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Google Books detail failed');
+  const item = await res.json();
+  return normalizeGoogleVolume(item);
+}
+
+function normalizeGoogleVolume(item) {
+  const v = item.volumeInfo || {};
+  const industry = v.industryIdentifiers || [];
+  const ids10 = industry.filter(x => x.type === 'ISBN_10').map(x => x.identifier);
+  const ids13 = industry.filter(x => x.type === 'ISBN_13').map(x => x.identifier);
+  return {
+    id: item.id,
+    source: 'google',
+    title: v.title || item.id,
+    authors: v.authors || [],
+    publishedDate: v.publishedDate || '',
+    thumbnail: v.imageLinks?.thumbnail ? v.imageLinks.thumbnail.replace('http://', 'https://') : null,
+    pageCount: v.pageCount || null,
+    language: v.language || '',
+    subjects: v.categories || [],
+    publisher: v.publisher || '',
+    description: v.description || '',
+    identifiers: { isbn10: ids10, isbn13: ids13 },
+    previewLink: item.accessInfo?.webReaderLink || v.previewLink || '',
+    infoLink: v.infoLink || '',
+  };
+}
+
+// --- Search input wiring ----------------------------------------------------
+const input = document.getElementById('searchInput');
+const clearBtn = document.getElementById('clearBtn');
+
+function setQueryInURL(q) {
+  const url = new URL(location.href);
+  if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+  history.replaceState(null, '', url);
+}
+
+function syncInputFromURL() {
+  const q = new URLSearchParams(location.search).get('q') || '';
+  input.value = q;
+}
+
+syncInputFromURL();
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    setQueryInURL(input.value.trim());
+    location.hash = '#/';
+    handleRoute();
+  }
+});
+clearBtn.addEventListener('click', () => {
+  input.value = '';
+  setQueryInURL('');
+  location.hash = '#/';
+  handleRoute();
+});
+
+</script>
+</body>
+</html>
